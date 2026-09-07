@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import fs from "fs/promises";
-import crypto from "crypto";
 import { getAuthenticatedUser } from "@/lib/auth";
+import { uploadImageBuffer } from "@/lib/cloudinary";
 
 export const dynamic = "force-dynamic";
 
@@ -45,31 +43,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sanitize extension
-    const originalExt = path.extname(file.name) || ".png";
-    const cleanExt = originalExt.toLowerCase().replace(/[^a-z0-9.]/g, "");
-    const uniqueId = crypto.randomUUID().slice(0, 12);
-    const timestamp = Date.now();
-    const fileName = `trade_${timestamp}_${uniqueId}${cleanExt}`;
-
-    // Target upload directory: public/uploads
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await fs.mkdir(uploadsDir, { recursive: true });
-
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const filePath = path.join(uploadsDir, fileName);
 
-    await fs.writeFile(filePath, buffer);
-
-    const servedUrl = `/uploads/${fileName}`;
+    // Upload directly to Cloudinary
+    const uploadResult = await uploadImageBuffer(buffer, "trading_journal/trades");
 
     return NextResponse.json(
       {
         success: true,
-        url: servedUrl,
-        filename: fileName,
-        size: file.size,
+        url: uploadResult.url,
+        filename: file.name,
+        size: uploadResult.bytes || file.size,
         type: file.type,
       },
       { status: 201 }
@@ -77,8 +62,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Upload handler error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to process image upload" },
+      { error: error.message || "Failed to process image upload to Cloudinary" },
       { status: 500 }
     );
   }
 }
+
